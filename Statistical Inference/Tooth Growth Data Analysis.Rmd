@@ -1,0 +1,96 @@
+---
+title: "Tooth Growth Data Analysis"
+author: "yangru1q1"
+date: '2019-06-27'
+output: pdf_document
+---
+```{r setoptions, echo=FALSE}
+library(knitr)
+opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+```{r load-library}
+library(tidyverse)
+```
+
+## Synopsis
+In this project, we are going to explore the ToothGrowth dataset in the R datasets package. The dataset contains 60 observations regarding to the length of **odontoblasts** (cell responsible for tooch growth) for guinea pigs. Each animal recieved one of three dose levels of vitamin C (0.5, 1 and 2 mg/day) by one of two delivery methods, orange juice or ascorbic acid (a form of vitamin C and coded as VC). So, there are total **15** treatment combinations, by different delivery method with different amout. The main goal for this project is to understand if the growth of tooth length for pigs differ by each treatment combinations. From this project, we can conclude that the tooth length does effected by different treatment combinations; Furthermore, mean tooth length for animals who recieve more than 1 mg orange juice (1 or 2 mg) per day seems have no difference with the mean tooth length for those animals who recieve 2 mg vitamin C per day.  
+
+## Data Exploration
+
+```{r load-dataset}
+data("ToothGrowth")
+``` 
+Notice that "dose" is numeric in the dataset, we need to transform "dose" column into factor.  
+
+```{r exploration}
+str(ToothGrowth)
+```
+
+### Summary across groups of treament
+```{r summary-across}
+kable(ToothGrowth %>%
+                group_by(supp, dose) %>% 
+                summarize(min_len = min(len),
+                          median_len = median(len),
+                          max_len = max(len),
+                          mean_len = mean(len),
+                          sd_len = sd(len))
+)
+```  
+```{r across-plot}
+TGgroup <- ToothGrowth %>% 
+                mutate(group = paste(supp, dose, sep = "_")) %>%
+                select(len, group)
+
+dodge <- position_dodge(width = 0.4)
+TGgroup %>%
+        ggplot(aes(x = factor(group), y = len, fill = factor(group))) +
+        geom_violin(position = dodge) +
+        geom_boxplot(width=.1, outlier.colour=NA, position = dodge) +
+        labs(title = "Violin and boxplot across treatment") +
+        theme(plot.title = element_text(hjust = 0.5))
+        
+```
+
+We can visualize from above plot, the costant variance across each treatments have been violated. We should consider using t-test with unequal variance.  
+
+##  Data Analysis
+Let's build a new dataset contain all p-values for unequal variance two sample t-test and visualize it. For two different treatments group of observation, $g_1$ and $g_2$, the t-test is basically testing two groups have equal means.
+$$
+H_0: \mu_{g_1} = \mu_{g_2}\ \ \  
+v.s. \ \ \ 
+H_a: \mu_{g_1} \ne \mu_{g_2}
+$$
+
+Since multiple comparisons have performed, let's consider to use multiple standards whether we should reject the alternative hypothesis, namely "No Correction", "Bonferroni" and "BH".
+```{r p-value}
+groups <- unique(TGgroup$group)
+pVals <- data.frame()
+n <- 1
+for(i in 1:length(groups)){
+        for(j in seq(i+1, 6)){
+                pVals[n,1] = groups[i]; pVals[n,2] = groups[j]
+                subdata = subset(TGgroup, group %in% c(groups[i], groups[j]))
+                pVals[n,3] = t.test(len~group, paired = FALSE, var.equal = FALSE,
+                                data = subdata)$p.value[1]
+                n = n + 1
+        }
+        if(n==16) break
+}
+colnames(pVals) <- c("group1", "group2", "pvalue")
+pVals <- pVals %>% arrange(pvalue) %>%
+        mutate(p.Sig = ifelse(pvalue<=0.05, "Reject", "Not reject"),
+               Bonferronni = ifelse(pvalue <= 0.05 / 15, "Reject", "Not reject"),
+               BH = ifelse(pvalue <= 1:15 / 15 * 0.05, "Reject", "Not Reject"))
+kable(pVals, digits = 12)
+```  
+
+
+Observed that if we use the p-value for two sample t-test, 13 out of 15 treatment groups will have different tooth length means at 95 percent confidence level; If we control the family-wise error rate, 10 out of 15 treatment groups will have different tooth length means at 95 percent confidence level; if we control the false-discovery rate, 13 out of 15 treatment groups will have different tooth length means at 95 percent confidence level.
+
+## Conclusion
+1. Mean tooth length for animals who recieve more than 1 mg orange juice (1 or 2 mg) per day seems have no difference with the mean tooth length for those animals who recieve 2 mg vitamin C per day.
+2. Amount of VC or orange juice recieved by animal daliy does influence the tootch length.
+
+

@@ -1,0 +1,259 @@
+---
+title: "Tornado and Flood are the Most Harmful Events in the U.S. according to the Storm Dataset"
+author: "yangru1q1"
+date: '2019-06-20'
+output: html_document
+---
+
+```{r setoptions, echo=FALSE}
+library(knitr)
+opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+```{r load-library}
+library(tidyverse)
+library(cowplot)
+```
+## Synopsis
+In this report we explore the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage. We try to find out the events have the greatest damage to the population health and economic. **Tornado** is the most harmful event with respect to population health, the amount of people injured or died in Tornado is approximately twice of the amont in other events. And **Flood** is the events with the greatest economic consequance, approximate one-third of the total economic loss comes from the Flood.
+
+## Data Processing
+From the [Storm Dataset](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2) we download the dataset and put the data into a folder called "Data" under current working directory. The [Storm Data Documentation](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf) is not very helpful, so I did some research on this dataset which I will present the result within the exploratory data part.  
+```{r load-data, cache=TRUE}
+data <- read.csv("./Data/StormData.csv.bz2", sep = ",", header = TRUE)
+```
+
+### Quick look at the dataset
+After load the dataset, the first thing we need to do is to have basic understanding about the dataset. First, let's check the dimension.  
+```{r check-dim}
+dim(data)
+```
+This dataset is quite a big dataset contains 37 variables and 902997 observations. Let's have some quick inspiration about what the dataset contains.
+
+```{r data-contains}
+str(data)
+```
+The primary goal of this analysis is to understand which type of events are most harmful with respect to population health and have the greatest economic consequences. We will focus on "EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG" and "CROPDMGEXP" according to the [code book](https://studylib.net/doc/7817108/record-layout) I found in [discussion forums](https://www.coursera.org/learn/reproducible-research/discussions/all/threads/uXt72FEGEeabqA6JxT890w). Let's first explore these variables a little bit.
+
+
+### Explore "FATALITIES" and "INJURIES"
+
+"EVTYPE" is just event type, we saw previously this dataset contains 985 different types of events.  
+"FATALITIES", "INJURIES" are the main soource to identify the most harmful events type with respect to population health. According to the code book, they are number of death and number injury.  
+We've seen previously, both of them are numbers, one thing we would to know is whether or not there's missing value in this two columns.
+
+```{r exp-death-injury}
+data_frame("FATALITIES" = sum(is.na(data$FATALITIES)),
+           "INJURIES" = sum(is.na(data$INJURIES)))
+```
+Notice that, both columns with no missing value, this means we can use them directly. 
+
+### Explore "PROPDMG" and "CROPDMG"
+
+Element in "PROPDMG" and "CROPDMG" are also number, we repeat the process to check the missing values. No missing values tell us these two column are ready to use.
+```{r exp-the-other-4}
+data_frame("PROPDMG" = sum(is.na(data$PROPDMG)),
+           "CROPDMG" = sum(is.na(data$CROPDMG)))
+```
+
+### Explore "PROPDMGEXP" and "CROPDMGEXP"
+
+By previous summary of the *str()* function, we know both "PROPDMGEXP" and "CROPDMGEXP" column exist some special characters and numbers differ than "h" or "H" (for hundred), "k" or "K" (for thousand), "m" or "M" (for million) and "b" or "B" (for billion)，these characters are we expected by the code book. Let's explore on those speciial characters in "PROPDMGEXP" more.
+
+```{r exp-1}
+levels(data$PROPDMGEXP)
+```
+```{r exp-2}
+Idx1 <- grep("[-\\?\\+0-8]", data$PROPDMGEXP)
+Idx3 <- grep("[BhHKmM]", data$PROPDMGEXP)
+
+data_frame("Empty String" = sum(data$PROPDMGEXP == ""),
+           "Not Empty String" = length(Idx1),
+           "Regular Character" = length(Idx3))
+```
+Among all elements in "PROPDMGEXP" column, we have following observations:  
+* "B", "h", "H", "K", "m" and "M" are regular characters we expected by the code book, approximately half of elements are these characters.  
+* There are half of the element in "PROPDMGEXP" are empty strings, we have to have an idea what's does empty string stands for, in the other words, we can not just ignore them.  
+* "-", "+" and "0" to "8" are non-regular characters other than empty string, it's only a small proportion of the entire dataset, we may can ignore them, but this require further analysis.  
+
+But just looking at the name of the column and the expression of number in quotation mark, one natural guess would be exponentail function base 10. In the other words, if there exists one row with "PROPDMG" x and "PROPDMGEXP" y, the could mean the total damage is $x*10^y$.  
+Let try to check this, notice that there exists one column called "REMARKS" which contain the information about the event in that row. We grab all rows in the dataset with "PROPDMGEXP" with a speical character other than empty string and with dollar sign in "REMARKS".  
+To reduce the time for *grep()* function, I first subset the dataset with only those special characters, and made a tabel for "PROPDMG" and "PROPDMGEXP" columns.  
+
+```{r exp-3}
+dataEx1 <- data[Idx1, ]
+Idx2 <- grep("\\$", dataEx1$REMARKS)
+dataEx2 <- dataEx1[Idx2, ]
+dataEx2[, c("PROPDMG", "PROPDMGEXP")]
+```
+If our assumption is true, then the first column in above table should be read as "the total damage for properties is $150.0 * 10^0 = 150$". But our assumption is wrong! 
+
+```{r exp-4, cache=TRUE}
+dataEx2$REMARKS[1]
+```
+As we can see, the remark told us there was \$1500.00 damage, this is not we thought.
+
+```{r exp-5, cache=TRUE}
+dataEx2$REMARKS[8]
+```
+The 8th row should be a total \$50,000 damage but not \$50.  
+
+In fact, I'm planning to igore the rows with sepcial characters, with the following 3 reasons:  
+1. We don't have enough observation to check each special characters individualy. We can only check `r nrow(dataEx2)` rows.  
+2, Only a small portion of dataset with these characters, which is approximate 0.  
+3. For a exponential function base 10, it makes a huge difference if we don't have a proper exponent.  
+
+
+For the "CROPDMGEXP" column, we will ignore column with special characters other than the empty string based on the same reasons, below it the proportion of special characters in "CROPDMGEXP" column.
+```{r exp-6}
+Idx4 <- grep("[\\?02]", data$CROPDMGEXP)
+length(Idx4) / nrow(data)
+```
+
+One last special character is empty string.
+```{r exp-7}
+mean1 <- mean(data[data$PROPDMGEXP == "", "PROPDMG"] == 0)
+mean2 <- mean(data[data$CROPDMGEXP == "", "CROPDMG"] == 0)
+data_frame("0 PROPDMG | Empty String in PROPDMGEXP" = mean1,
+           "0 CROPDMG | Empty string in CROPDMGEXP" = mean2)
+```
+In fact, almost all data with empty string in "PROPDMGEXP" and "CROPDMGEXP" columns will have a zero valye at "PROPDMG" and "CROPDMG" columns respectively. This time I think we are good to assumer empty string means 1.
+
+### Conclusion in Exploratory Data Analysis Part
+We mainly analyzed the special character in the "PROPDMGEXP" and "CROPDMGEXP" columns and I decide to ignore rows with all special characters other than empty string.  
+
+### Build Dataset for the  First Question
+From previous part, I decide to ignore some rows of the dataset. Create a new dataset with all the rows removed.
+```{r preprocessing-1}
+Idx <- union(Idx1, Idx4)
+dataEx <- data[-Idx, ]
+```
+For the problem which events most harmful with repect to population health, we want a new column in the dataset with the total amount people died and injured in each row. And let's creat a new dataset which have 2 columns, the event type and the total number of people damaged from that event, call it **dataHealth**.
+```{r preprocessing-2}
+dataEx$Damage2Health <- dataEx$FATALITIES + dataEx$INJURIES
+
+dataHealth <- dataEx %>% group_by(EVTYPE) %>%
+                summarize(totalDamage2Health = sum(Damage2Health)) %>%
+                arrange(desc(totalDamage2Health))
+```
+
+### Build Dataset for the Second Question
+For the problem which events have the greatest economic consequences, we want to replace the special characters in "PROPDMGEXP" and "CROPDMGEXP".
+```{r preprocessing-3}
+pattern <- c("", "h", "H", "k", "K", "m", "M", "B")
+replacement <- c(10^0, 10^2, 10^2, 10^3, 10^3, 10^6, 10^6, 10^9)
+# PROPDMGEXP
+invisible(sapply(seq_along(pattern), 
+              function(x) dataEx$PROPDMGEXP <<- replace(as.character(dataEx$PROPDMGEXP),
+              which(dataEx$PROPDMGEXP == pattern[x]),
+              replacement[x])))
+dataEx$PROPDMGEXP <- as.numeric(dataEx$PROPDMGEXP)
+# CROPDMGEXP
+invisible(sapply(seq_along(pattern), 
+              function(x) dataEx$CROPDMGEXP <<- replace(as.character(dataEx$CROPDMGEXP),
+              which(dataEx$CROPDMGEXP == pattern[x]),
+              replacement[x]))) 
+dataEx$CROPDMGEXP <- as.numeric(dataEx$CROPDMGEXP)
+```
+Check the results:
+```{r preprocessing-4}
+str(dataEx$PROPDMGEXP)
+```
+```{r preprocessing-5}
+str(dataEx$CROPDMGEXP)
+```
+Creat a new dataset with two columns, events type and total economic damage caused by each event. Call it **dataEco**.  
+```{r preprocessing-6}
+dataEco <- dataEx %>% 
+                mutate(Damage = PROPDMG*PROPDMGEXP + CROPDMG*CROPDMGEXP) %>%
+                group_by(EVTYPE) %>%
+                summarize(Damage2Eco = sum(Damage)) %>%
+                arrange(desc(Damage2Eco))
+```
+
+## Result
+
+### Population Damage
+Let first look at the summary about the total population damage, and the head of the dataset **dataHealt**.
+```{r pop-1}
+summary(dataHealth$totalDamage2Health)
+```
+
+```{r pop-2}
+head(dataHealth)
+```
+As we can see, **Tornado is the event most harmful for population health**, and Tornado have a such large value that makes it differ than other events.  
+Let's have some inspiration by plots. I made a figure with two plots, the first bar plot shows the top 3 event harmful for population health; the second bar plot shows the damage made by Tornado and events other than Tornado.  
+```{r pop-plot}
+plot1 <- dataHealth[1:3, ] %>% 
+            ggplot(aes(x = EVTYPE, y = totalDamage2Health)) +
+            geom_bar(stat = "identity") +
+            labs(x = "",
+                 y = "Total Damage to Health (# of ppl)",
+                 title = "Top 3 Harmful Events for health") +
+            theme(plot.title = element_text(hjust = 0.5),
+                  text = element_text(size = 10),
+                  axis.text.x = element_text(angle = 315, size = 10, 
+                                             colour = "blue"))
+
+
+
+plot2 <- dataHealth %>% 
+            mutate("Tor" = ifelse(EVTYPE == "TORNADO", "Tornado", "Others")) %>%
+            group_by(Tor) %>%
+            summarize(totalDamage2Health = sum(totalDamage2Health)) %>%
+            ggplot(aes(Tor, totalDamage2Health)) +
+            geom_bar(stat = "identity") +
+            labs(x = "",
+                 y = "Total Damage to Health (# of ppl)",
+                 title = "Tor v.s. Others") +
+            theme(plot.title = element_text(hjust = 0.5),
+                  text = element_text(size = 10),
+                  axis.text.x = element_text(angle = 315, size = 10,
+                                             color = "blue"))
+plot_grid(plot1, plot2)
+```  
+
+The plots indicate that **Tornado** is the most harmful event with respect to population health, the amount of people injured or died in Tornado is approximately twice of the amont in other events.
+
+### Economic Consquence
+Let's again look at the dataset.
+```{r eco-1}
+summary(dataEco$Damage2Eco)
+```
+
+```{r eco-2}
+head(dataEco)
+```
+We face the same situation again. As we can see, **Flood** is the event which have the greatest economic consequence, let's make the same two plots agains.  
+```{r eco-plot}
+plot3 <- dataEco[1:3, ] %>% 
+            mutate(Damage = Damage2Eco / 10^9) %>%
+            ggplot(aes(x = EVTYPE, y = Damage)) +
+            geom_bar(stat = "identity") +
+            labs(x = "",
+                 y = "Total Damage to Eco (Billion Dollar)",
+                 title = "Top 3 Harmful Events for Eco") +
+            theme(plot.title = element_text(hjust = 0.5),
+                  text = element_text(size = 10),
+                  axis.text.x = element_text(angle = 315, size = 10, 
+                                             colour = "blue", vjust = 0.5))
+
+plot4 <- dataEco %>% 
+            mutate("Flood" = ifelse(EVTYPE == "FLOOD", "Flood", "Others")) %>%
+            group_by(Flood) %>%
+            summarize(Damage2Eco = sum(Damage2Eco) / 10^9) %>%
+            ggplot(aes(Flood, Damage2Eco)) +
+            geom_bar(stat = "identity") +
+            labs(x = "",
+                 y = "Total Damage to Eco (Billion Dollar)",
+                 title = "Flood v.s. Others") +
+            theme(plot.title = element_text(hjust = 0.5),
+                  text = element_text(size = 10),
+                  axis.text.x = element_text(angle = 315, size = 10, 
+                                             color = "blue"))
+
+plot_grid(plot3, plot4)
+```  
+
+The plots indicate that **Flood** is the events with the greatest economic consequance, approximate one-third of the total economic loss comes from Flood.
