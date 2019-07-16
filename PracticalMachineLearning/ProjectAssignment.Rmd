@@ -174,7 +174,7 @@ result
 We build a **random forest** for predicting which participant has done an exercise given observations of how well each exercise is done. By center and scale our data, and apply a 5-fold cross-validation we achieve an accurate model, which gives us 20 out of 20 correct in prediction.  
 
 ## Reference
-*[Improving Performance of Random Forest in caret::train()](https://github.com/lgreski/datasciencectacontent/blob/master/markdown/pml-randomForestPerformance.md#improving-performance-of-random-forest-in-carettrain)*
+[Improving Performance of Random Forest in caret::train()](https://github.com/lgreski/datasciencectacontent/blob/master/markdown/pml-randomForestPerformance.md#improving-performance-of-random-forest-in-carettrain)
 
 ## Appendix
 
