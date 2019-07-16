@@ -156,10 +156,11 @@ rf.confusionMatrix <- confusionMatrix(validation, y.validation)
 accuracy <- confusionMatrix(validation, y.validation)[[3]][1]
 
 accuracy.rf <- confusionMatrix(predict(rf, x.train), y.train)$overall[1]
+ise <- 1 - accuracy.rf
 ose <- 1 - accuracy
 ```
 
-We pick **random forest** model in result. We first test the model performance in the validation set (check Figure 4: Confusion matrix for rf predict validation set), and a accuracy rate `r accuracy` was given. **The out of sample rate is a measure of how accurately an algorithm is able to predict outcome values for previously unseen data, which should be one minus the accuracy rate, which is `r ose`**. This out-of-sample error is low, however, this value makes sense, since the accuracy rate for our model is `r accuracy.rf`.
+We pick **random forest** model in result. We first test the model performance in the validation set (check Figure 4: Confusion matrix for rf predict validation set), and a accuracy rate `r accuracy` was given. **The out of sample rate is a measure of how accurately an algorithm is able to predict outcome values for previously unseen data, which should be one minus the accuracy rate, which is `r ose`**. This out-of-sample error is low, however, this value makes sense, since the in-sample error rate for our model is `r ise`.
 
 ## predict the test dataset
 ```{r predict}

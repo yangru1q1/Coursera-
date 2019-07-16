@@ -319,8 +319,9 @@ rf.confusionMatrix &lt;- confusionMatrix(validation, y.validation)
 accuracy &lt;- confusionMatrix(validation, y.validation)[[3]][1]
 
 accuracy.rf &lt;- confusionMatrix(predict(rf, x.train), y.train)$overall[1]
+ise &lt;- 1 - accuracy.rf
 ose &lt;- 1 - accuracy</code></pre>
-<p>We pick <strong>random forest</strong> model in result. We first test the model performance in the validation set (check Figure 4: Confusion matrix for rf predict validation set), and a accuracy rate 0.995106 was given. <strong>The out of sample rate is a measure of how accurately an algorithm is able to predict outcome values for previously unseen data, which should be one minus the accuracy rate, which is 0.004894</strong>. This out-of-sample error is low, however, this value makes sense, since the accuracy rate for our model is 1.</p>
+<p>We pick <strong>random forest</strong> model in result. We first test the model performance in the validation set (check Figure 4: Confusion matrix for rf predict validation set), and a accuracy rate 0.995106 was given. <strong>The out of sample rate is a measure of how accurately an algorithm is able to predict outcome values for previously unseen data, which should be one minus the accuracy rate, which is 0.004894</strong>. This out-of-sample error is low, however, this value makes sense, since the in-sample error rate for our model is 0.</p>
 </div>
 </div>
 <div id="predict-the-test-dataset" class="section level2">
