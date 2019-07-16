@@ -1,0 +1,196 @@
+---
+title: "Practical Machine Learning Project Assignment"
+author: "yangru1q1"
+date: '2019-07-15'
+output: html_document
+---
+
+```{r knitr_options, include=FALSE}
+library(knitr)
+opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+```{r load-library}
+set.seed(247365)
+library(tidyverse)
+library(cowplot)
+library(caret)
+```
+
+## Synopsis
+
+The goal of this project is to analyze the [Weight Lifting Exercise Dataset ]( http://groupware.les.inf.puc-rio.br/har), use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to build a machine learning model along with *caret* package, and predict which participant has done an exercise given observations of how well each exercise is done.  
+
+By explory the dataset, we found there are lots of useless variable in this dataset. After cleaning the dataset, we split our training set into training and validation sets. I build **Random Forest** and **Gradient Boosting Machine** models, both of these two model performed well, however, we chosse the **Random Forest** model since it has a higher accuracy. The **Random Forest** model also did a good job to predict the validation set, and gives a accuracy rate more than 99 percent. Finally, I use the model to predict new observations, 20 out of 20 observations are correctly predicted.
+
+## Loading datasets
+Notice that I've set the seed to *247365* for reproducibility purpose.
+
+```{r load-datasets, cache=TRUE}
+train_url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+test_url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+# read datasets
+train.raw <- read.csv(train_url, na.strings = c("", "NA", "#DIV/0!"))
+test.raw <- read.csv(test_url, na.strings = c("", "NA", "#DIV/0!"))
+
+# remove urls
+rm(train_url); rm(test_url)
+```
+
+## Clean datasets
+After loading both datasets, we can find that the first 8 variable are just for record purpose, which contain useless information such as id numbers and time. These columns won't help much in the machine learning model, so we choose to remove them.  
+
+One thing we can notice in the remaining dataset is there exists columns with large proportion of missing value (check the Figure 1: Histogram to illustrate proportion of data missing in raw dataset). Since the dataset contains variable either have no missing values or variable missing more than 90 percent values, we choose to remove all column with missing values. 
+
+```{r datasets-exploratory-and-clean}
+# remove useless columns
+train.raw.clean <- train.raw[, -c(1:8)]
+test.raw.clean  <- test.raw[, -c(1:8)]
+
+# explore the columns with missing value
+naHist <- qplot(colMeans(is.na(train.raw.clean)), geom = "histogram",
+                xlab = "prop. of missing values",
+                ylab = "frequency")
+
+# delete columns with large amount missing values
+del <- which(colMeans(is.na(train.raw.clean)) != 0)
+train.clean <- train.raw.clean[, -del]
+test.clean <- test.raw.clean[, -del]
+```
+
+
+
+## build machine learning model
+
+### split cleaned training set into training and validation sets
+```{r split-datasets}
+inTrain <- createDataPartition(y=train.clean$classe, p=0.75, list = F)
+train.train <- train.clean[inTrain, ]
+train.validation <- train.clean[-inTrain, ]
+```
+
+After split our cleaned training set, we have 3 datasets on hands:  
+- **train.train**: the training set  
+- **train.validation**: the validation set  
+- **test.clean**: the observations we want to predict  
+
+### preprocess
+```{r preprocess}
+library(skimr)
+chooseCol <- sample(1:ncol(train.train), 10)
+skimmed <- skim_to_wide(train.train[, chooseCol])
+
+prePro <- preProcess(train.train[, -52], 
+                         method = c("center", "scale", "nzv"))
+
+train.prePro <- predict(prePro, train.train)
+x.train <- train.prePro[, -52]
+y.train <- train.train$classe
+```
+
+Since our train set contained 52 columns, which means we have 51 variable can use as independent random variable, these random variable may need to preprocess. We first summarise 10 random variables in the training set (check Figure 2: Summary for random 10 variables in training data) by using **skimr::skim_to_wide**. Observe many problems such left or right skewness, varibles different in scale. So, a preprocess with **center** and **scale** and help us fix some of the problems. We also proformed a **nzv** (neer zero variance), however, since the demension of our dataset did not change, there are no variable have neer zero variance issuse.
+
+### cross validation
+```{r trainControl}
+fitControl <- trainControl(method = "cv", 
+                           number = 5,
+                           allowParallel = TRUE)
+```
+We use k-fold cross-validation by specifing *method = "cv"* and *number = 5 (k = 5)* in **caret::trainControl** function. This is my cross-validation method to avoid overfitting.  
+
+Since we want to classify observations, so I build **random forest** and **gradient boosting machine** models base on the same cross-validation strategy and did a model comparison by using **caret::resamples** function. For 5-fold cross-validation method, R automatically pick the one with highest accuracy rate for each model. Result shows (check Figure 3: Model Comparison Results) **random forest** is better than **gradient boosting** since a higher accuracy rate.  
+
+Notice here I use **parallel** and **doParallel** package to do parallel processing.
+
+### develop the random forest train model
+```{r rf, cache=TRUE}
+# configure parallel processing
+library(parallel)
+library(doParallel)
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+
+# train model
+task.start <- Sys.time()
+rf <- train(x.train, y.train, data = train.prePro, method = "rf",
+            trControl = fitControl, tuneLength = 5)
+task.end <- Sys.time()
+
+#
+stopCluster(cluster)
+registerDoSEQ()
+```
+
+
+### develop the gradient boosting machine train model
+```{r gbm, cache = TRUE, results='hide'}
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+
+# train model
+gbm <- train(classe ~ ., data = train.prePro, method = "gbm",
+            trControl = fitControl)
+
+#
+stopCluster(cluster)
+registerDoSEQ()
+```
+
+### model comparison
+```{r}
+models_compare <- resamples(list(GBM = gbm, RF = rf))
+summary.compare <- summary(models_compare)
+```
+
+### validation using random forest model
+```{r validation}
+validation.prePro <- predict(prePro, train.validation)
+x.validation <- validation.prePro[, -52]
+y.validation <- validation.prePro[, 52]
+
+validation <- predict(rf, x.validation)
+rf.confusionMatrix <- confusionMatrix(validation, y.validation)
+accuracy <- confusionMatrix(validation, y.validation)[[3]][1]
+
+accuracy.rf <- confusionMatrix(predict(rf, x.train), y.train)$overall[1]
+ose <- 1 - accuracy
+```
+
+We pick **random forest** model in result. We first test the model performance in the validation set (check Figure 4: Confusion matrix for rf predict validation set), and a accuracy rate `r accuracy` was given. **The out of sample rate is a measure of how accurately an algorithm is able to predict outcome values for previously unseen data, which should be one minus the accuracy rate, which is `r ose`**. This out-of-sample error is low, however, this value makes sense, since the accuracy rate for our model is `r accuracy.rf`.
+
+## predict the test dataset
+```{r predict}
+test.prePro <- predict(prePro, test.clean[, -52])
+result <- predict(rf, test.prePro)
+result
+```
+
+## Conclusion
+
+We build a **random forest** for predicting which participant has done an exercise given observations of how well each exercise is done. By center and scale our data, and apply a 5-fold cross-validation we achieve an accurate model, which gives us 20 out of 20 correct in prediction.  
+
+## Reference
+*[Improving Performance of Random Forest in caret::train()](https://github.com/lgreski/datasciencectacontent/blob/master/markdown/pml-randomForestPerformance.md#improving-performance-of-random-forest-in-carettrain)*
+
+## Appendix
+
+### Figure 1: Histogram to illustrate proportion of data missing in raw dataset
+```{r}
+naHist
+```
+
+### Figure 2: Summary for random 10 variables in training data
+```{r}
+kable(skimmed[, c(1:5, 9:11, 13, 15:16)])
+```
+
+### Figure 3: Model Comparison Results
+```{r}
+summary.compare[[3]]
+```
+
+### Figure 4: Confusion matrix for rf predict validation set
+```{r}
+rf.confusionMatrix
+```
