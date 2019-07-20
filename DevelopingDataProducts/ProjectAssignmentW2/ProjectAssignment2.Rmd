@@ -12,6 +12,7 @@ library(leaflet)
 ```
 
 ## Synopsis
+
 It is hot in summer, especially for someone who does not have an air-conditioning. In this project, I'm using [Air Conditioned Public Places & Cooling Centres](https://www.toronto.ca/city-government/data-research-maps/open-data/open-data-catalogue/locations-and-mapping/#d7f09371-1386-cc5c-69c9-79d4cf7f6faa) dataset to show the availability of buildings that are open to the general public that offer an air-conditioned space for temporary relief from the extreme heat in **Toronto** area.
 
 ## Map
