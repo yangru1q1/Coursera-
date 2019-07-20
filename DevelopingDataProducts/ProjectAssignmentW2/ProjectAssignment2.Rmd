@@ -1,0 +1,54 @@
+---
+title: "ProjectAssignment2"
+author: "yangru1q1"
+date: '2019-07-20'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+library(tidyverse)
+library(leaflet)
+```
+
+## Synopsis
+It is hot in summer, especially for someone who does not have an air-conditioning. In this project, I'm using [Air Conditioned Public Places & Cooling Centres](https://www.toronto.ca/city-government/data-research-maps/open-data/open-data-catalogue/locations-and-mapping/#d7f09371-1386-cc5c-69c9-79d4cf7f6faa) dataset to show the availability of buildings that are open to the general public that offer an air-conditioned space for temporary relief from the extreme heat in **Toronto** area.
+
+## Map
+```{r, echo=F}
+url <- "http://app.toronto.ca/opendata//ac_locations/locations.csv?v=1.00"
+
+ac <- read.csv(url)
+
+ac.data <- ac[, -c(1, 2, 3)]
+
+ac.data$pop <- with(ac.data, paste("Location Name:", Location.Name, "<br>",
+                                   "Type:", Location.desc, "<br>",
+                                   "Adress:", Address, "<br>",
+                                   "Phone:", Phone))
+
+
+url1 <- "https://emojipedia-us.s3.dualstack.us-west-1.amazonaws.com/thumbs/320/apple/198/freezing-face_1f976.png"
+url2 <- "https://emojipedia-us.s3.dualstack.us-west-1.amazonaws.com/thumbs/320/google/146/freezing-face_1f976.png"
+url3 <- "https://emojipedia-us.s3.dualstack.us-west-1.amazonaws.com/thumbs/320/microsoft/209/freezing-face_1f976.png"
+url4 <- "https://emojipedia-us.s3.dualstack.us-west-1.amazonaws.com/thumbs/320/samsung/161/freezing-face_1f976.png"
+
+
+coldIcon <- icons(
+        iconUrl = ifelse(ac.data$Location.desc == "Library", url1,
+                         ifelse(ac.data$Location.desc == "Community Centre", url2,
+                                ifelse(ac.data$Location.desc == "Civic Centre", url3, url4))),
+        iconWidth = 30, iconHeight = 30)
+
+
+ac.data %>% leaflet() %>%
+        addTiles() %>%
+        addMarkers(lat = ~Lat, 
+                   lng = ~Lon,
+                   popup = ~pop,
+                   icon = coldIcon)
+```
+
+## Conclusion
+Let's all remember [Willis Carrier](https://en.wikipedia.org/wiki/Willis_Carrier), this handsome guy saved our life.
+
